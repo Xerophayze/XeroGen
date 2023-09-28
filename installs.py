@@ -1,11 +1,19 @@
-# installs.py
-
 import csv
 import os
 
 def create_csv_file(filename, headers):
-    if not os.path.exists(filename):
-        with open(filename, 'w', newline='', encoding='utf-8') as file:
+    # Define the directory path
+    dir_path = "Scripts"
+    
+    # Check if directory exists, if not create it
+    if not os.path.exists(dir_path):
+        os.makedirs(dir_path)
+    
+    # Modify the filename to include the directory
+    full_path = os.path.join(dir_path, filename)
+    
+    if not os.path.exists(full_path):
+        with open(full_path, 'w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
             writer.writerow(headers)
 
