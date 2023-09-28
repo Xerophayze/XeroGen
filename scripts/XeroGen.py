@@ -1,10 +1,11 @@
-import modules.scripts as scripts
 import gradio as gr
 import os
 import csv
 import requests
 from datetime import datetime
 from modules import script_callbacks
+import modules.generation_parameters_copypaste as parameters_copypaste
+from modules import extensions
 
 CSV_FILE = "chatgpt_responses.csv"
 PROMPT_CSV = "prompts.csv"
@@ -167,18 +168,33 @@ def create_chatbot_ui():
     models = fetch_models(first_api_key)
     launch_chat_interface(models)
 
+def get_self_extension():
+    # This function retrieves the current extension's object based on the file path
+    if '__file__' in globals():
+        filepath = __file__
+    else:
+        import inspect
+        filepath = inspect.getfile(lambda: None)
+    for ext in extensions.active():
+        if ext.path in filepath:
+            return ext
+    return None
+    
 def on_ui_tabs():
-    # Assuming you have defined or imported root_path somewhere at the beginning
-    js_path = root_path / "javascript" / "main.js"
-    css_path = root_path / "style.css"
-    original_template_response = gr.routes.templates.TemplateResponse
-    first_api_key = next(iter(read_api_keys_from_csv().values()))
-    models = fetch_models(first_api_key)
+    # This function sets up the Gradio UI with tabs
+    ext = get_self_extension()
+    if ext is None:
+        return []
 
-    with gr.Blocks(analytics_enabled=False, css=css_path.read_text()) as blocks:
+    # If you have additional JS or CSS files to include, you can adapt the following
+    # js_ = [f'{x.path}?{os.path.getmtime(x.path)}' for x in ext.list_files('js', '.js')]
+    # js_.insert(0, ext.path)
+
+    with gr.Blocks(analytics_enabled=False) as blocks:
         with gr.Tab(label="XeroGen", elem_id="tab_XeroGen"):
+            # Here you can set up your UI components, like create_chatbot_ui()
             create_chatbot_ui()
 
-    return [(blocks, "ChatGPT", "chatgpt_tab")]
+    return [(blocks, "XeroGen", "tab_XeroGen")]
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
