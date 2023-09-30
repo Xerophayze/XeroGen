@@ -1,17 +1,65 @@
+import modules.scripts as scripts
 import gradio as gr
 import os
 import csv
 import requests
 from datetime import datetime
-from modules import script_callbacks
-import modules.generation_parameters_copypaste as parameters_copypaste
+from modules.scripts import basedir
+from modules.txt2img import txt2img
+from modules import script_callbacks, sd_samplers
+import modules.scripts
 from modules import extensions
+from modules import generation_parameters_copypaste as params_copypaste
+from modules.paths_internal import extensions_dir
 
-CSV_FILE = "chatgpt_responses.csv"
-PROMPT_CSV = "prompts.csv"
-API_KEYS_CSV = "api_keys.csv"
+# Define the directory where you want to save the CSV files
+CSV_DIR = os.path.join("extensions", "XeroGen", "Scripts")
+
+# Ensure the directory exists, if not, create it
+if not os.path.exists(CSV_DIR):
+    os.makedirs(CSV_DIR)
+
+# Paths to the CSV files
+CSV_FILE = os.path.join(CSV_DIR, "chatgpt_responses.csv")
+PROMPT_CSV = os.path.join(CSV_DIR, "prompts.csv")
+API_KEYS_CSV = os.path.join(CSV_DIR, "api_keys.csv")
+
 recent_outputs = {}
 chat_sessions = {}  # Dictionary to store ongoing chat sessions by prompt title
+
+def get_self_extension():
+    if '__file__' in globals():
+        filepath = __file__
+    else:
+        import inspect
+        filepath = inspect.getfile(lambda: None)
+    for ext in extensions.active():
+        if ext.path in filepath:
+            return ext
+
+def check_and_create_csv_files():
+    # List of CSV files and their headers
+    csv_files = {
+        CSV_FILE: ["Date Generated", "User Message", "Response"],
+        PROMPT_CSV: ["Title", "Prompt"],
+        API_KEYS_CSV: ["Title", "Key"]
+    }
+    
+    print("Checking and creating CSV files...")  # Debug print statement
+    
+    for file, headers in csv_files.items():
+        abs_file_path = os.path.abspath(file)  # Get absolute path
+        if not os.path.exists(abs_file_path):
+            try:
+                with open(abs_file_path, 'w', newline='', encoding='utf-8') as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow(headers)
+                print(f"Created {abs_file_path}")  # Debug print statement with absolute path
+            except Exception as e:
+                print(f"Error creating {abs_file_path}: {e}")  # Print any error that occurs
+        else:
+            print(f"{abs_file_path} already exists.")  # Debug print statement with absolute path
+
 
 def read_prompts_from_csv():
     prompts = {}
@@ -23,6 +71,7 @@ def read_prompts_from_csv():
             prompts[title] = prompt
     return prompts
 
+check_and_create_csv_files()
 PROMPTS_DICT = read_prompts_from_csv()
 
 def read_api_keys_from_csv():
@@ -39,7 +88,7 @@ def save_new_api_key_to_csv(title, api_key):
     with open(API_KEYS_CSV, 'a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         writer.writerow([title, api_key])
-        
+
 def fetch_models(api_key):
     response = requests.get(
         "https://api.openai.com/v1/engines",
@@ -50,12 +99,8 @@ def fetch_models(api_key):
     data = response.json()
     if 'data' in data:
         models = [engine['id'] for engine in data['data']]
-        if 'gpt-3.5-turbo' in models:
-            models.remove('gpt-3.5-turbo')
-            models.insert(0, 'gpt-3.5-turbo')
         return models
     else:
-        print(f"Error fetching engines: {data.get('error', 'Unknown error')}")
         return []
 
 def save_to_csv(user_message):
@@ -63,7 +108,6 @@ def save_to_csv(user_message):
     if recent_outputs:
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         mode = 'a' if os.path.exists(CSV_FILE) else 'w'
-        
         with open(CSV_FILE, mode, newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
             if mode == 'w':
@@ -72,10 +116,9 @@ def save_to_csv(user_message):
                 writer.writerow([timestamp, user_message, output])
         recent_outputs.clear()
 
-def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message, model=None, num_requests=1, save_responses=False, label=False, style=False, trend=False):
+def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False):
     global recent_outputs, chat_sessions
-
-    # Check and save the new API key if provided
+    
     if new_api_key_title and new_api_key:
         save_new_api_key_to_csv(new_api_key_title, new_api_key)
         api_key = new_api_key
@@ -83,14 +126,10 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
         API_KEYS = read_api_keys_from_csv()
         api_key = API_KEYS[api_key_title]
 
-    # Fetch user prompt from PROMPTS_DICT
     user_prompt = PROMPTS_DICT[title]  
-    
-    # Check model
     if model is None:
         model = "gpt-3.5-turbo"
     
-    # Modify the message based on provided flags
     modified_message = message
     if style:
         modified_message = "$style, " + modified_message
@@ -101,13 +140,11 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
     if trend:
         modified_message += ", $trend"
     
-    # Prepare the history for the chat
     formatted_history = [{"role": "system", "content": user_prompt}]
     if title in chat_sessions:
         formatted_history.extend(chat_sessions[title])
     else:
         chat_sessions[title] = []
-    # Replace or append the user's message
     if len(chat_sessions[title]) == 1:
         chat_sessions[title][0] = {"role": "user", "content": modified_message}
     else:
@@ -115,7 +152,6 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
     
     formatted_history.extend(chat_sessions[title])
 
-    # Make the API request
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
         headers={
@@ -134,67 +170,62 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
     else:
         return f"Error: {response_data.get('error', 'Unknown error.')}"
     
-    recent_outputs = all_responses.copy()  # Use .copy() to keep a separate list for saving
+    recent_outputs = all_responses.copy()
     if save_responses:
         save_to_csv(modified_message)
     return "\n---\n".join(all_responses)
 
-
-def launch_chat_interface(models):
-    API_KEY_TITLES = list(read_api_keys_from_csv().keys())
-    iface_chat = gr.Interface(
-        fn=chat_with_gpt,
-        inputs=[
-            gr.components.Textbox(label="New API Key Title (Optional)"),
-            gr.components.Textbox(label="New API Key (Optional)", type="password"),
-            gr.components.Dropdown(choices=API_KEY_TITLES, label="API Key Selection"),
-            gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt"),
-            gr.components.Textbox(label="Your Message"),
-            gr.components.Dropdown(choices=models, label="Model Selection"),
-            gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts"),
-            gr.components.Checkbox(label="Save Responses"),
-            gr.components.Checkbox(label="Label"),
-            gr.components.Checkbox(label="Style"),
-            gr.components.Checkbox(label="Trend")
-        ],
-        outputs=gr.components.Textbox(label="ChatGPT Responses", type="text"),
-        )
-    iface_chat.launch(debug=False)
-    return iface_chat
-
-def create_chatbot_ui():
-    # This function sets up the chatbot UI using Gradio
-    first_api_key = next(iter(read_api_keys_from_csv().values()))
-    models = fetch_models(first_api_key)
-    launch_chat_interface(models)
-
-def get_self_extension():
-    # This function retrieves the current extension's object based on the file path
-    if '__file__' in globals():
-        filepath = __file__
-    else:
-        import inspect
-        filepath = inspect.getfile(lambda: None)
-    for ext in extensions.active():
-        if ext.path in filepath:
-            return ext
-    return None
-    
 def on_ui_tabs():
-    # This function sets up the Gradio UI with tabs
     ext = get_self_extension()
     if ext is None:
         return []
+    js_ = [f'{x.path}?{os.path.getmtime(x.path)}' for x in ext.list_files('js', '.js')]
+    js_.insert(0, ext.path)
 
-    # If you have additional JS or CSS files to include, you can adapt the following
-    # js_ = [f'{x.path}?{os.path.getmtime(x.path)}' for x in ext.list_files('js', '.js')]
-    # js_.insert(0, ext.path)
+    api_keys = read_api_keys_from_csv().values()
+    if not api_keys:
+        models = []  
+    else:
+        first_api_key = next(iter(api_keys))
+        models = fetch_models(first_api_key)
 
-    with gr.Blocks(analytics_enabled=False) as blocks:
-        with gr.Tab(label="XeroGen", elem_id="tab_XeroGen"):
-            # Here you can set up your UI components, like create_chatbot_ui()
-            create_chatbot_ui()
+    with gr.Blocks(analytics_enabled=False) as XeroGen_interface:
+        with gr.Row():
+            with gr.Column(scale=2):
+                gr.HTML(value='\n'.join(js_), elem_id="XeroGen_js_path", visible=False)
+                gr.Markdown("""
+                <center>
+                <h3>XeroGen Interface</h3>
+                <p>Provide a description here.</p>
+                </center>
+                """)
+        
+        with gr.Row().style(equal_height=False):
+            with gr.Column(variant='panel'):
+                new_api_key_title_input = gr.components.Textbox(label="New API Key Title (Optional)")
+                new_api_key_input = gr.components.Textbox(label="New API Key (Optional)")
+                API_KEY_TITLES = list(read_api_keys_from_csv().keys())
+                api_key_title_input = gr.components.Dropdown(choices=API_KEY_TITLES, label="API Key Selection")
+                prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt")
+                message_input = gr.components.Textbox(label="Your Message")
+                model_input = gr.components.Dropdown(choices=models, label="Model Selection")
+                num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts")
+                save_responses_input = gr.components.Checkbox(label="Save Responses")
+                label_input = gr.components.Checkbox(label="Label")
+                style_input = gr.components.Checkbox(label="Style")
+                trend_input = gr.components.Checkbox(label="Trend")
+                
+                chat_response_output = gr.components.Textbox(label="ChatGPT Responses", type="text")
+                
+                submit_button = gr.Button(label="Submit", elem_id="xerogen_submit")
+                
+                # Link the Submit button to the chat_with_gpt function
+                submit_button.click(fn=chat_with_gpt,
+                                    inputs=[new_api_key_title_input, new_api_key_input, api_key_title_input, prompt_title_input, 
+                                            message_input, model_input, num_requests_input, save_responses_input, label_input, 
+                                            style_input, trend_input],
+                                    outputs=chat_response_output)
 
-    return [(blocks, "XeroGen", "tab_XeroGen")]
+    return [(XeroGen_interface, 'XeroGen', 'XeroGen_interface')]
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
