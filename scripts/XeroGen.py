@@ -116,7 +116,7 @@ def save_to_csv(user_message):
                 writer.writerow([timestamp, user_message, output])
         recent_outputs.clear()
 
-def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False):
+def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False, max_tokens=2048):
     global recent_outputs, chat_sessions
     
     if new_api_key_title and new_api_key:
@@ -160,7 +160,8 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
         },
         json={
             "model": model,
-            "messages": formatted_history
+            "messages": formatted_history,
+            "max_tokens": max_tokens
         }
     )
 
@@ -190,17 +191,18 @@ def on_ui_tabs():
         models = fetch_models(first_api_key)
 
     with gr.Blocks(analytics_enabled=False) as XeroGen_interface:
+        # Program Information at the top
         with gr.Row():
-            with gr.Column(scale=2):
-                gr.HTML(value='\n'.join(js_), elem_id="XeroGen_js_path", visible=False)
-                gr.Markdown("""
-                <center>
-                <h3>XeroGen Interface</h3>
-                <p>Provide a description here.</p>
-                </center>
-                """)
+            gr.Markdown("""
+            <center>
+            <h3>XeroGen Interface</h3>
+            <p>Provide a description here.</p>
+            </center>
+            """)
         
+        # Divide the remaining space into two columns
         with gr.Row().style(equal_height=False):
+            # Left column for inputs
             with gr.Column(variant='panel'):
                 new_api_key_title_input = gr.components.Textbox(label="New API Key Title (Optional)")
                 new_api_key_input = gr.components.Textbox(label="New API Key (Optional)")
@@ -209,21 +211,24 @@ def on_ui_tabs():
                 prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt")
                 message_input = gr.components.Textbox(label="Your Message")
                 model_input = gr.components.Dropdown(choices=models, label="Model Selection")
+                max_tokens_input = gr.components.Slider(minimum=5, maximum=2048, step=1, default=2048, label="Max Response Tokens")
                 num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts")
                 save_responses_input = gr.components.Checkbox(label="Save Responses")
                 label_input = gr.components.Checkbox(label="Label")
                 style_input = gr.components.Checkbox(label="Style")
                 trend_input = gr.components.Checkbox(label="Trend")
                 
-                chat_response_output = gr.components.Textbox(label="ChatGPT Responses", type="text")
-                
+            # Right column to display the submit button and the output window
+            with gr.Column(variant='panel'):
                 submit_button = gr.Button(label="Submit", elem_id="xerogen_submit")
+                
+                chat_response_output = gr.components.Textbox(label="ChatGPT Responses", type="text")
                 
                 # Link the Submit button to the chat_with_gpt function
                 submit_button.click(fn=chat_with_gpt,
                                     inputs=[new_api_key_title_input, new_api_key_input, api_key_title_input, prompt_title_input, 
                                             message_input, model_input, num_requests_input, save_responses_input, label_input, 
-                                            style_input, trend_input],
+                                            style_input, trend_input, max_tokens_input],
                                     outputs=chat_response_output)
 
     return [(XeroGen_interface, 'XeroGen', 'XeroGen_interface')]
