@@ -193,16 +193,22 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as XeroGen_interface:
         # Program Information at the top
         with gr.Row():
-            gr.Markdown("""
-            <center>
-            <h3>XeroGen Interface</h3>
-            <p>Hello! I'm Xerophayze. My vision was to create an extension centered around my Ultimate Stable Diffusion Prompt Generator (USDPG) to simplify the process of generating prompts without the need to leave the Automatic 1111 interface. The XeroGen Interface is the realization of that vision.</p>
-            <p>While this interface can work harmoniously with any pre-prompt, it shines brightest when paired with the prompt generator I've meticulously crafted over several months.</p>
-            <p>Welcome to the XeroGen Interface. This sophisticated and user-friendly platform is designed to harness the power of AI for content creation. Crafted with precision, it aims to provide users with a seamless experience and top-tier results.</p>
-            <p>Interested in more tools? Check out our <a href="https://shop.xerophayze.com" target="_blank">Archane Shadows</a>.</p>
-            <p>For tutorials, updates, and more, visit our <a href="https://video.xerophayze.com" target="_blank">Alchemy with Xerophayze</a>.</p>
-            </center>
-            """)
+            # First Column for the Text Content
+            with gr.Column():
+                gr.Markdown("""
+                <left>
+                <h3>XeroGen Interface</h3>
+                <p>Hello! I'm Xerophayze. My vision was to create an extension centered around my Ultimate Stable Diffusion Prompt Generator (USDPG) to simplify the process of generating prompts without the need to leave the Automatic 1111 interface. The XeroGen Interface is the realization of that vision.</p>
+                <p>While this interface can work harmoniously with any pre-prompt, it shines brightest when paired with the prompt generator I've meticulously crafted over several months.</p>
+                <p>Interested in more tools? Check out our <a href="https://shop.xerophayze.com" target="_blank">Archane Shadows</a>.</p>
+                <p>For tutorials, updates, and more, visit our <a href="https://video.xerophayze.com" target="_blank">Alchemy with Xerophayze</a>.</p>
+                </center>
+                """)
+
+            # Second Column for the Image Placeholder
+            with gr.Column():
+                gr.Image(placeholder=True)
+
         
         # Divide the remaining space into two columns
         with gr.Row().style(equal_height=False):
