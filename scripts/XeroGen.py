@@ -229,10 +229,10 @@ def on_ui_tabs():
                 gr.Markdown("""
                 <left>
                 <h3>XeroGen Interface</h3>
-                <p>Hello! I'm Xerophayze. My vision was to create an extension centered around my Ultimate Stable Diffusion Prompt Generator (USDPG) to simplify the process of generating prompts without the need to leave the Automatic 1111 interface. The XeroGen Interface is the realization of that vision.</p>
-                <p>While this interface can work harmoniously with any pre-prompt, it shines brightest when paired with the prompt generator I've meticulously crafted over several months.</p>
-                <p>Interested in more tools? Check out our <a href="https://shop.xerophayze.com" target="_blank">Archane Shadows</a>.</p>
-                <p>For tutorials, updates, and more, visit our <a href="https://video.xerophayze.com" target="_blank">Alchemy with Xerophayze</a>.</p>
+                <p>Thank you for using my Extension.  To get started you will need to enter a title and api key and select the check box for New API key, then click Add.  Then go to extensions or settings and reload the UI.  This will give this extension a chance to get a list of the available models to select from.</p>
+                <p>While this interface should work with other GPT prompt generators, it has been primarially designed with my prompt generator I've meticulously crafted over the last several months.</p>
+                <p>You can purchase my Prompt Generator at my shop along with other tools. <a href="https://shop.xerophayze.com" target="_blank">Archane Shadows</a>.</p>
+                <p>For tutorials, updates, and more, visit my Youtube channel <a href="https://video.xerophayze.com" target="_blank">Alchemy with Xerophayze</a>.</p>
                 </center>
                 """)
 
@@ -244,7 +244,7 @@ def on_ui_tabs():
                 api_key_title_input = gr.components.Dropdown(choices=API_KEY_TITLES, label="API Key Selection")
                 prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt")
                 message_input = gr.components.Textbox(label="Your Message")
-                model_input = gr.components.Dropdown(choices=models, label="Model Selection - Use gpt-3.5-turbo for 5")
+                model_input = gr.components.Dropdown(choices=models, label="Model Selection - Use gpt-3.5-turbo for 5 or less prompts. Use gpt-3.5-turbo-16k for requests of more than 5 prompts.")
                 num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts -")
                 save_responses_input = gr.components.Checkbox(label="Save Responses")
                 label_input = gr.components.Checkbox(label="Label")
