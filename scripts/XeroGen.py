@@ -3,6 +3,8 @@ import gradio as gr
 import os
 import csv
 import requests
+import time
+import uuid
 from datetime import datetime
 from modules.scripts import basedir
 from modules.txt2img import txt2img
@@ -11,6 +13,9 @@ import modules.scripts
 from modules import extensions
 from modules import generation_parameters_copypaste as params_copypaste
 from modules.paths_internal import extensions_dir
+
+# Global variable to store chat sessions
+chat_sessions = {}
 
 # Define the directory where you want to save the CSV files
 CSV_DIR = os.path.join("extensions", "XeroGen", "Scripts")
@@ -59,7 +64,6 @@ def check_and_create_csv_files():
                 print(f"Error creating {abs_file_path}: {e}")  # Print any error that occurs
         else:
             print(f"{abs_file_path} already exists.")  # Debug print statement with absolute path
-
 
 def read_prompts_from_csv():
     prompts = {}
@@ -116,20 +120,34 @@ def save_to_csv(user_message):
                 writer.writerow([timestamp, user_message, output])
         recent_outputs.clear()
 
-def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False, max_tokens=2048):
-    global recent_outputs, chat_sessions
-    
-    if new_api_key_title and new_api_key:
-        save_new_api_key_to_csv(new_api_key_title, new_api_key)
-        api_key = new_api_key
-    else:
-        API_KEYS = read_api_keys_from_csv()
-        api_key = API_KEYS[api_key_title]
+def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False):
+    global recent_outputs
+ 
+    API_KEYS = read_api_keys_from_csv()
+    api_key = API_KEYS[api_key_title]
 
-    user_prompt = PROMPTS_DICT[title]  
-    if model is None:
-        model = "gpt-3.5-turbo"
+    # Start a new chat session
+    user_prompt = PROMPTS_DICT[title]
+    formatted_history = [{"role": "system", "content": user_prompt}]
+
+    # Send the user-selected prompt to ChatGPT and print the response to the console
+    prompt_response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": model,
+            "messages": formatted_history
+        }
+    )
+    print(prompt_response.json())  # Printing the response to the console
+
+    # Introduce a 2-second delay
+    time.sleep(2)
     
+    # Now, send the user's message
     modified_message = message
     if style:
         modified_message = "$style, " + modified_message
@@ -140,17 +158,7 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
     if trend:
         modified_message += ", $trend"
     
-    formatted_history = [{"role": "system", "content": user_prompt}]
-    if title in chat_sessions:
-        formatted_history.extend(chat_sessions[title])
-    else:
-        chat_sessions[title] = []
-    if len(chat_sessions[title]) == 1:
-        chat_sessions[title][0] = {"role": "user", "content": modified_message}
-    else:
-        chat_sessions[title].append({"role": "user", "content": modified_message})
-    
-    formatted_history.extend(chat_sessions[title])
+    formatted_history.append({"role": "user", "content": modified_message})
 
     response = requests.post(
         "https://api.openai.com/v1/chat/completions",
@@ -160,8 +168,7 @@ def chat_with_gpt(new_api_key_title, new_api_key, api_key_title, title, message,
         },
         json={
             "model": model,
-            "messages": formatted_history,
-            "max_tokens": max_tokens
+            "messages": formatted_history
         }
     )
 
@@ -193,7 +200,31 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as XeroGen_interface:
         # Program Information at the top
         with gr.Row():
-            # First Column for the Text Content
+            # New column for 'Title', 'Content', and checkboxes
+            with gr.Column(variant='panel'):
+                title_input = gr.components.Textbox(label="Title")
+                content_input = gr.components.Textbox(label="Content")
+                new_api_key_checkbox = gr.components.Checkbox(label="New API Key")
+                new_seed_prompt_checkbox = gr.components.Checkbox(label="New Seed Prompt")
+                add_button = gr.Button(value='Add', variant='primary')
+
+                # Function to handle the add button's logic
+                def handle_add(title, content, new_api_key, new_seed_prompt):
+                    if new_api_key:
+                        # Save to API_KEYS_CSV and update the in-memory dictionary
+                        save_new_api_key_to_csv(title, content)
+                        API_KEY_TITLES.append(title)
+                    if new_seed_prompt:
+                        # Save to PROMPT_CSV and update the in-memory dictionary
+                        with open(PROMPT_CSV, 'a', newline='', encoding='utf-8') as file:
+                            writer = csv.writer(file)
+                            writer.writerow([title, content])
+                        PROMPTS_DICT[title] = content
+
+                add_button.click(fn=handle_add, 
+                                 inputs=[title_input, content_input, new_api_key_checkbox, new_seed_prompt_checkbox])
+
+            # Column for the Text Content
             with gr.Column():
                 gr.Markdown("""
                 <left>
@@ -205,24 +236,16 @@ def on_ui_tabs():
                 </center>
                 """)
 
-            # Second Column for the Image Placeholder
-            with gr.Column():
-                gr.Image(placeholder=True)
-
-        
         # Divide the remaining space into two columns
         with gr.Row().style(equal_height=False):
-            # Left column for inputs
+            # Left column for inputs (removed the 'New API Key' fields)
             with gr.Column(variant='panel'):
-                new_api_key_title_input = gr.components.Textbox(label="New API Key Title (Optional)")
-                new_api_key_input = gr.components.Textbox(label="New API Key (Optional)")
                 API_KEY_TITLES = list(read_api_keys_from_csv().keys())
                 api_key_title_input = gr.components.Dropdown(choices=API_KEY_TITLES, label="API Key Selection")
                 prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt")
                 message_input = gr.components.Textbox(label="Your Message")
-                model_input = gr.components.Dropdown(choices=models, label="Model Selection")
-                max_tokens_input = gr.components.Slider(minimum=5, maximum=2048, step=1, default=2048, label="Max Response Tokens")
-                num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts")
+                model_input = gr.components.Dropdown(choices=models, label="Model Selection - Use gpt-3.5-turbo for 5")
+                num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts -")
                 save_responses_input = gr.components.Checkbox(label="Save Responses")
                 label_input = gr.components.Checkbox(label="Label")
                 style_input = gr.components.Checkbox(label="Style")
@@ -230,17 +253,19 @@ def on_ui_tabs():
                 
             # Right column to display the submit button and the output window
             with gr.Column(variant='panel'):
-                submit_button = gr.Button(label="Submit", elem_id="xerogen_submit")
+                submit_button = gr.Button(value='Submit', elem_id="xerogen_submit", variant='primary')
                 
                 chat_response_output = gr.components.Textbox(label="ChatGPT Responses", type="text")
                 
                 # Link the Submit button to the chat_with_gpt function
                 submit_button.click(fn=chat_with_gpt,
-                                    inputs=[new_api_key_title_input, new_api_key_input, api_key_title_input, prompt_title_input, 
+                                    inputs=[api_key_title_input, prompt_title_input, 
                                             message_input, model_input, num_requests_input, save_responses_input, label_input, 
-                                            style_input, trend_input, max_tokens_input],
+                                            style_input, trend_input],
                                     outputs=chat_response_output)
 
     return [(XeroGen_interface, 'XeroGen', 'XeroGen_interface')]
+
+
 
 script_callbacks.on_ui_tabs(on_ui_tabs)
