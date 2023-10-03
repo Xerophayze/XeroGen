@@ -103,6 +103,11 @@ def fetch_models(api_key):
     data = response.json()
     if 'data' in data:
         models = [engine['id'] for engine in data['data']]
+        
+        # Prioritize the specified models
+        priority_models = ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4']
+        models = priority_models + [model for model in models if model not in priority_models]
+
         return models
     else:
         return []
@@ -119,6 +124,13 @@ def save_to_csv(user_message):
             for output in recent_outputs:
                 writer.writerow([timestamp, user_message, output])
         recent_outputs.clear()
+        
+def refresh_dropdowns():
+    # Read the updated contents from the CSV files
+    updated_api_keys = list(read_api_keys_from_csv().keys())
+    updated_prompts = list(read_prompts_from_csv().keys())
+
+    return updated_api_keys, updated_prompts
 
 def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False):
     global recent_outputs
@@ -127,27 +139,15 @@ def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requ
     api_key = API_KEYS[api_key_title]
 
     # Start a new chat session
-    user_prompt = PROMPTS_DICT[title]
-    formatted_history = [{"role": "system", "content": user_prompt}]
+    formatted_history = []
+    if title and title in PROMPTS_DICT:
+        user_prompt = PROMPTS_DICT[title]
+        formatted_history.append({"role": "system", "content": user_prompt})
 
-    # Send the user-selected prompt to ChatGPT and print the response to the console
-    prompt_response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": model,
-            "messages": formatted_history
-        }
-    )
-    print(prompt_response.json())  # Printing the response to the console
-
-    # Introduce a 2-second delay
+    # Introduce a 2-second delay (you might want to move this below if you only want the delay after sending the initial prompt)
     time.sleep(2)
-    
-    # Now, send the user's message
+
+    # Modify the user's message based on other checkboxes
     modified_message = message
     if style:
         modified_message = "$style, " + modified_message
@@ -200,12 +200,12 @@ def on_ui_tabs():
     with gr.Blocks(analytics_enabled=False) as XeroGen_interface:
         # Program Information at the top
         with gr.Row():
-            # New column for 'Title', 'Content', and checkboxes
             with gr.Column(variant='panel'):
                 title_input = gr.components.Textbox(label="Title")
                 content_input = gr.components.Textbox(label="Content")
                 new_api_key_checkbox = gr.components.Checkbox(label="New API Key")
                 new_seed_prompt_checkbox = gr.components.Checkbox(label="New Seed Prompt")
+                
                 add_button = gr.Button(value='Add', variant='primary')
 
                 # Function to handle the add button's logic
@@ -221,15 +221,21 @@ def on_ui_tabs():
                             writer.writerow([title, content])
                         PROMPTS_DICT[title] = content
 
+                    # Return empty strings to clear the title and content input fields
+                    return "", "", False, False
+
+
                 add_button.click(fn=handle_add, 
-                                 inputs=[title_input, content_input, new_api_key_checkbox, new_seed_prompt_checkbox])
+                                 inputs=[title_input, content_input, new_api_key_checkbox, new_seed_prompt_checkbox],
+                                 outputs=[title_input, content_input, new_api_key_checkbox, new_seed_prompt_checkbox])
+
 
             # Column for the Text Content
             with gr.Column():
                 gr.Markdown("""
                 <left>
                 <h3>XeroGen Interface</h3>
-                <p>Thank you for using my Extension.  To get started you will need to enter a title and api key and select the check box for New API key, then click Add.  Then go to extensions or settings and reload the UI.  This will give this extension a chance to get a list of the available models to select from.</p>
+                <p>Thank you for using my Extension.  To get started you will need to enter a title and api key and select the check box for New API key, then click Add.  If you have a base or seed prompt you would like to add, enter the title and content for that, select the "New Seed Prompt' checkbox and then click add. Then go to extensions or settings and reload the UI.  This will give this extension a chance to get a list of the available models to select from.</p>
                 <p>While this interface should work with other GPT prompt generators, it has been primarially designed with my prompt generator I've meticulously crafted over the last several months.</p>
                 <p>You can purchase my Prompt Generator at my shop along with other tools. <a href="https://shop.xerophayze.com" target="_blank">Archane Shadows</a>.</p>
                 <p>For tutorials, updates, and more, visit my Youtube channel <a href="https://video.xerophayze.com" target="_blank">Alchemy with Xerophayze</a>.</p>
@@ -242,10 +248,10 @@ def on_ui_tabs():
             with gr.Column(variant='panel'):
                 API_KEY_TITLES = list(read_api_keys_from_csv().keys())
                 api_key_title_input = gr.components.Dropdown(choices=API_KEY_TITLES, label="API Key Selection")
-                prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Prompt")
+                prompt_title_input = gr.components.Dropdown(choices=list(PROMPTS_DICT.keys()), label="Your Seed Prompt (Optional)")
                 message_input = gr.components.Textbox(label="Your Message")
                 model_input = gr.components.Dropdown(choices=models, label="Model Selection - Use gpt-3.5-turbo for 5 or less prompts. Use gpt-3.5-turbo-16k for requests of more than 5 prompts.")
-                num_requests_input = gr.components.Slider(minimum=1, maximum=10, step=1, label="Number of Prompts -")
+                num_requests_input = gr.components.Slider(minimum=1, maximum=20, step=1, label="Number of Prompts")
                 save_responses_input = gr.components.Checkbox(label="Save Responses")
                 label_input = gr.components.Checkbox(label="Label")
                 style_input = gr.components.Checkbox(label="Style")
