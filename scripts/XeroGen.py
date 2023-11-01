@@ -132,7 +132,7 @@ def refresh_dropdowns():
 
     return updated_api_keys, updated_prompts
 
-def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False):
+def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requests=1, save_responses=False, label=False, style=False, trend=False, no_break=False):
     global recent_outputs
  
     API_KEYS = read_api_keys_from_csv()
@@ -151,6 +151,8 @@ def chat_with_gpt(api_key_title, title, message, model="gpt-3.5-turbo", num_requ
     modified_message = message
     if style:
         modified_message = "$style, " + modified_message
+    if no_break:
+        modified_message = "No 'BREAK', " + modified_message
     if num_requests > 1:
         modified_message = f"{num_requests} prompts, " + modified_message
     if label:
@@ -254,6 +256,7 @@ def on_ui_tabs():
                 num_requests_input = gr.components.Slider(minimum=1, maximum=20, step=1, label="Number of Prompts")
                 save_responses_input = gr.components.Checkbox(label="Save Responses")
                 label_input = gr.components.Checkbox(label="Label")
+                no_break_input = gr.components.Checkbox(label="No 'BREAK'")
                 style_input = gr.components.Checkbox(label="Style")
                 trend_input = gr.components.Checkbox(label="Trend")
                 
@@ -264,12 +267,11 @@ def on_ui_tabs():
                 chat_response_output = gr.components.Textbox(label="ChatGPT Responses", type="text")
                 
                 # Link the Submit button to the chat_with_gpt function
-                submit_button.click(fn=chat_with_gpt,
-                                    inputs=[api_key_title_input, prompt_title_input, 
-                                            message_input, model_input, num_requests_input, save_responses_input, label_input, 
-                                            style_input, trend_input],
-                                    outputs=chat_response_output)
-
+            submit_button.click(fn=chat_with_gpt,
+                    inputs=[api_key_title_input, prompt_title_input, 
+                            message_input, model_input, num_requests_input, save_responses_input, label_input, 
+                            style_input, trend_input, no_break_input],  # Include no_break_input
+                    outputs=chat_response_output)
     return [(XeroGen_interface, 'XeroGen', 'XeroGen_interface')]
 
 
